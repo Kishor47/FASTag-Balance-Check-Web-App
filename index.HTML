@@ -1,0 +1,328 @@
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FASTag Mini Project - Simulated FASTag Recharge & Balance</title>
+  <style>
+    :root {
+      --primary: #0052cc;
+      --primary-dark: #003d99;
+      --accent: #00a676;
+      --accent-dark: #00754c;
+      --background: #f9fafc;
+      --text-primary: #222;
+      --text-secondary: #555;
+      --danger: #d32f2f;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0; padding: 0;
+      background: var(--background);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      color: var(--text-primary);
+    }
+    .container {
+      background: white;
+      max-width: 460px;
+      margin: 40px 15px;
+      padding: 25px 30px 35px 30px;
+      border-radius: 15px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      width: 100%;
+    }
+    h1 {
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      border: 2px solid var(--primary);
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s ease;
+    }
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      border-color: var(--primary-dark);
+      outline: none;
+    }
+    button {
+      background-color: var(--primary);
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+      margin-bottom: 15px;
+      width: 100%;
+    }
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+    .balance-display {
+      text-align: center;
+      font-size: 28px;
+      margin: 15px 0 20px 0;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .message {
+      text-align: center;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+    .message.error {
+      color: var(--danger);
+    }
+    .message.success {
+      color: var(--accent);
+    }
+    .transactions {
+      border-top: 2px solid var(--primary);
+      padding-top: 15px;
+      font-size: 14px;
+    }
+    .transactions h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: var(--primary-dark);
+    }
+    .transaction-list {
+      max-height: 160px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fafafa;
+    }
+    .transaction-item {
+      padding: 8px 5px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+    }
+    .transaction-item:last-child {
+      border-bottom: none;
+    }
+    .transaction-type {
+      font-weight: 700;
+    }
+    .transaction-credit {
+      color: var(--accent-dark);
+    }
+    .transaction-debit {
+      color: var(--danger);
+    }
+    .footer {
+      text-align: center;
+      font-size: 14px;
+      margin-top: 25px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <main class="container" role="main" aria-label="FASTag Recharge">
+    <h1>FASTag Simulator</h1>
+
+    <label for="fastag-id">FASTag ID (Vehicle Number)</label>
+    <input type="text" id="fastag-id" placeholder="Enter your FASTag number" aria-describedby="fastagHelp" autocomplete="off" />
+    <small id="fastagHelp" style="display:block; margin-bottom: 20px; color:#555; font-size:12px;">Example: KA01AB1234</small>
+
+    <button id="btn-check-balance" aria-label="Check FASTag Balance">Check Balance</button>
+
+    <div id="balance-section" style="display:none;">
+      <p class="balance-display" aria-live="polite" id="balance-display">$0.00</p>
+
+      <label for="recharge-amount">Recharge Amount</label>
+      <input type="number" id="recharge-amount" min="1" placeholder="Enter amount to recharge" aria-label="Recharge amount" />
+      <button id="btn-recharge" aria-label="Recharge FASTag Balance">Recharge Now</button>
+    </div>
+
+    <div id="message" class="message" role="alert" aria-live="assertive"></div>
+
+    <section class="transactions" aria-label="Transaction history" style="display:none;">
+      <h2>Transaction History</h2>
+      <div class="transaction-list" id="transaction-list" tabindex="0">
+        <!-- Transactions entries go here -->
+      </div>
+    </section>
+
+    <div class="footer" aria-label="Footer">
+      &copy; 2024 FASTag Mini Project
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const fastagInput = document.getElementById('fastag-id');
+      const checkBalanceBtn = document.getElementById('btn-check-balance');
+      const rechargeSection = document.getElementById('balance-section');
+      const balanceDisplay = document.getElementById('balance-display');
+      const rechargeInput = document.getElementById('recharge-amount');
+      const rechargeBtn = document.getElementById('btn-recharge');
+      const messageEl = document.getElementById('message');
+      const transactionsSection = document.querySelector('.transactions');
+      const transactionList = document.getElementById('transaction-list');
+
+      const STORAGE_PREFIX = 'fastag_';
+
+      function showMessage(text, type = 'success') {
+        messageEl.textContent = text;
+        messageEl.className = 'message ' + (type === 'error' ? 'error' : 'success');
+        setTimeout(() => {
+          messageEl.textContent = '';
+          messageEl.className = 'message';
+        }, 4000);
+      }
+
+      function validateFastag(id) {
+        // Very simple validation: non-empty alphanumeric (vehicle number style)
+        return /^[A-Za-z0-9]{6,12}$/.test(id.trim().replace(/\s+/g, ''));
+      }
+
+      function getStorageKey(id) {
+        return STORAGE_PREFIX + id.toUpperCase();
+      }
+
+      function loadFastagData(id) {
+        let dataJSON = localStorage.getItem(getStorageKey(id));
+        if (dataJSON) {
+          try {
+            return JSON.parse(dataJSON);
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      }
+
+      function saveFastagData(id, data) {
+        localStorage.setItem(getStorageKey(id), JSON.stringify(data));
+      }
+
+      function updateBalanceDisplay(amount) {
+        balanceDisplay.textContent = '$' + amount.toFixed(2);
+      }
+
+      function renderTransactions(transactions) {
+        transactionList.innerHTML = '';
+        if (!transactions || transactions.length === 0) {
+          const noTx = document.createElement('p');
+          noTx.textContent = 'No transactions yet.';
+          noTx.style.color = '#666';
+          noTx.style.fontStyle = 'italic';
+          noTx.style.textAlign = 'center';
+          transactionList.appendChild(noTx);
+          return;
+        }
+        transactions.slice().reverse().forEach(tx => {
+          const div = document.createElement('div');
+          div.className = 'transaction-item';
+          
+          const desc = document.createElement('div');
+          desc.textContent = tx.description || 'Transaction';
+          
+          const amount = document.createElement('div');
+          amount.textContent = (tx.type === 'credit' ? '+' : '-') + '$' + tx.amount.toFixed(2);
+          amount.className = 'transaction-type ' + (tx.type === 'credit' ? 'transaction-credit' : 'transaction-debit');
+          
+          div.appendChild(desc);
+          div.appendChild(amount);
+          transactionList.appendChild(div);
+        });
+      }
+
+      function initUIForFastag(id) {
+        const data = loadFastagData(id) || { balance: 0, transactions: [] };
+        updateBalanceDisplay(data.balance);
+        renderTransactions(data.transactions);
+        rechargeSection.style.display = 'block';
+        transactionsSection.style.display = 'block';
+      }
+
+      function hideUI() {
+        rechargeSection.style.display = 'none';
+        transactionsSection.style.display = 'none';
+        updateBalanceDisplay(0);
+        transactionList.innerHTML = '';
+      }
+
+      checkBalanceBtn.addEventListener('click', () => {
+        const id = fastagInput.value.trim().toUpperCase().replace(/\s+/g, '');
+        if (!validateFastag(id)) {
+          showMessage('Please enter a valid FASTag ID (6-12 alphanumeric chars).', 'error');
+          hideUI();
+          return;
+        }
+        // Load or initialize data and show balance
+        initUIForFastag(id);
+        showMessage('FASTag balance loaded for: ' + id, 'success');
+      });
+
+      rechargeBtn.addEventListener('click', () => {
+        const id = fastagInput.value.trim().toUpperCase().replace(/\s+/g, '');
+        if (!validateFastag(id)) {
+          showMessage('Please enter a valid FASTag ID first.', 'error');
+          return;
+        }
+        const amount = parseFloat(rechargeInput.value);
+        if (!amount || amount <= 0) {
+          showMessage('Please enter a positive recharge amount.', 'error');
+          rechargeInput.focus();
+          return;
+        }
+        let data = loadFastagData(id) || { balance: 0, transactions: [] };
+        data.balance += amount;
+        data.transactions.push({
+          type: 'credit',
+          amount: amount,
+          description: 'Recharge',
+          date: new Date().toISOString()
+        });
+        saveFastagData(id, data);
+        updateBalanceDisplay(data.balance);
+        renderTransactions(data.transactions);
+        showMessage(`Successfully recharged $${amount.toFixed(2)}!`, 'success');
+        rechargeInput.value = '';
+        rechargeInput.focus();
+      });
+
+      fastagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          checkBalanceBtn.click();
+        }
+      });
+
+      rechargeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          rechargeBtn.click();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+```
